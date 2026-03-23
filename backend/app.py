@@ -52,11 +52,31 @@ def on_startup():
 
 
 # --------------------------------------------------
-# LOAD MODELS (ONCE AT STARTUP)
+# MODEL REGISTRY (LAZY LOADING)
 # --------------------------------------------------
-rf_model = joblib.load(RF_PATH)
-scaler = joblib.load(SCALER_PATH)
-lstm_model = load_model(LSTM_PATH)
+_MODEL_CACHE = {
+    "rf": None,
+    "scaler": None,
+    "lstm": None
+}
+
+def get_rf_model():
+    if _MODEL_CACHE["rf"] is None:
+        print(f"Loading RF model from {RF_PATH}...")
+        _MODEL_CACHE["rf"] = joblib.load(RF_PATH)
+    return _MODEL_CACHE["rf"]
+
+def get_scaler():
+    if _MODEL_CACHE["scaler"] is None:
+        print(f"Loading Scaler from {SCALER_PATH}...")
+        _MODEL_CACHE["scaler"] = joblib.load(SCALER_PATH)
+    return _MODEL_CACHE["scaler"]
+
+def get_lstm_model():
+    if _MODEL_CACHE["lstm"] is None:
+        print(f"Loading LSTM model from {LSTM_PATH}...")
+        _MODEL_CACHE["lstm"] = load_model(LSTM_PATH)
+    return _MODEL_CACHE["lstm"]
 
 # --------------------------------------------------
 # UTILITIES
@@ -80,10 +100,10 @@ def sensor_columns(df: pd.DataFrame):
 # --------------------------------------------------
 def compute_health(df: pd.DataFrame) -> pd.DataFrame:
     sensors = sensor_columns(df)
-    X = scaler.transform(df[sensors].values)
+    X = get_scaler().transform(df[sensors].values)
 
     # --- RF: instant health ---
-    health_rf = rf_model.predict(X)
+    health_rf = get_rf_model().predict(X)
 
     # --- LSTM: temporal smoothing ---
     lstm_pred = np.zeros_like(health_rf)
@@ -94,7 +114,7 @@ def compute_health(df: pd.DataFrame) -> pd.DataFrame:
             for i in range(len(health_rf) - SEQ_LEN)
         ]
         sequences = np.array(sequences).reshape(-1, SEQ_LEN, 1)
-        preds = lstm_model.predict(sequences, verbose=0).flatten()
+        preds = get_lstm_model().predict(sequences, verbose=0).flatten()
         lstm_pred[SEQ_LEN:] = preds
         lstm_pred[:SEQ_LEN] = preds[0]
     else:
@@ -174,7 +194,7 @@ def compute_rul(df: pd.DataFrame) -> list:
                 break
             
             # Predict next cycle health for all engines in batch
-            preds = lstm_model.predict(running_seqs, verbose=0)
+            preds = get_lstm_model().predict(running_seqs, verbose=0)
             
             # Check threshold
             reached_zero = (preds[:, 0] <= 0.05) & active_mask
