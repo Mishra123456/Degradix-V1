@@ -20,3 +20,4 @@ data/full_dataset/
 backend/ml/*.joblib
 backend/ml/*.keras
 backend/ml/*.pkl
+*.db
